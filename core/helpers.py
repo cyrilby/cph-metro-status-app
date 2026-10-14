@@ -114,11 +114,12 @@ def get_unique_day_names() -> list:
     return unique_day_names
 
 
-def check_missing_mapping() -> pd.DataFrame:
+def deal_with_missing_mapping() -> None:
 
     # Importing user-maintained mapping tables
-    mapping_file = "https://github.com/cyrilby/cph-metro-status/raw/refs/heads/main/data/mapping_tables.xlsx"
-    mapping_status = pd.read_excel(mapping_file, sheet_name="status")
+    # Note: these are loaded directly from the database
+    query = "SELECT * FROM mapping_messages"
+    mapping_status = conn.execute(query).df()
 
     # Detecting whether there are any unmapped service status messages
     # as well as the date(s) where data accuracy may be impacted due to lacking mapping
@@ -172,7 +173,8 @@ def check_missing_mapping() -> pd.DataFrame:
     else:
         mapping_warning = None
 
-    return unmapped_msg, mapping_warning
+    if mapping_warning:
+        st.warning(unmapped_msg)
 
 
 def deal_with_downtime(data_to_display: pd.DataFrame, selected_rows: list):

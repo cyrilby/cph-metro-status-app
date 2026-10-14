@@ -11,19 +11,24 @@ Last meaningful update: 14-10-2026
 
 import streamlit as st
 
-from helpers import check_missing_mapping, get_latest_status, get_unique_days, load_text
+from core.helpers import (
+    deal_with_missing_mapping,
+    get_latest_status,
+    get_unique_days,
+    load_text,
+)
 
 # Importing long text strings used in the app
 text = load_text()
-
-# # Connecting to the locally synced DuckDB
-# conn = get_app_data()
 
 
 # %% Page content
 
 # Page title displayed on top
 st.header("Welcome to the CPH metro status app!")
+
+# Checking for missing mapping entries
+deal_with_missing_mapping()
 
 # Informs the user of the app's purpose
 st.markdown(text["home_msg_1"])
@@ -35,9 +40,6 @@ _, _, n_days, _ = get_unique_days()
 
 # Displaying the latest service message from the metro's website
 st.subheader("Latest service status data", divider="grey")
-_, mapping_warning = check_missing_mapping()
-if mapping_warning:
-    st.warning(mapping_warning)
 
 most_recent, last_update_date, last_update_time = get_latest_status()
 msg_text = text["home_msg_3"]

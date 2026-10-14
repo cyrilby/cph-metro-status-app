@@ -14,20 +14,8 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from core.filters import (
-    filter_by_date_range,
-    filter_by_day_type,
-    filter_by_hour_type,
-    filter_by_line,
-    filter_downtime,
-)
-from core.helpers import (
-    check_missing_mapping,
-    deal_with_downtime,
-    get_period_string,
-    load_text,
-    plot_or_not,
-)
+from core.helpers import get_period_string, load_text, plot_or_not
+from core.loader import get_filtered_data
 from core.storage import get_app_data
 
 # Importing data and text strings used in the app
@@ -40,35 +28,12 @@ conn = get_app_data()
 # Page title displayed on top
 st.header("Overview")
 
-# Detecting and confirming slicer selections
-min_date, max_date = filter_by_date_range()
-day_types = filter_by_day_type()
-hour_types = filter_by_hour_type()
-selected_lines = filter_by_line()
-selected_rows = filter_downtime()
-
-# Checking for missing mapping entries
-unmapped_msg, mapping_warning = check_missing_mapping()
-
-# Sourcing the main df, incl. applying user filters
-query = """
-SELECT *
-FROM operation_fmt
-WHERE 1=1
-    AND date >= ?
-    AND date <= ?
-    AND day_type IN ?
-    AND official_rush_hour IN ?
-    AND line IN ?
-ORDER BY
-    line,
-    date;
-"""
-params = [min_date, max_date, day_types, hour_types, selected_lines]
-data_to_display = conn.execute(query, params).df()
-
-# Dealing with periods of system downtime
-data_to_display, downtime_msg = deal_with_downtime(data_to_display, selected_rows)
+# Source & filter data, deal with warnings, etc.
+data = get_filtered_data(conn)
+min_date = data.min_date
+max_date = data.max_date
+downtime_msg = data.downtime_msg
+data_to_display = data.df
 
 # Confirming the selected period
 selected_period = get_period_string(min_date, max_date)
@@ -166,8 +131,6 @@ detailed_desc = text["gen_detailed_desc"]
 
 # Plotting the elements in the correct order,
 # starting with KPIs on top of the page and proceeding with charts
-if mapping_warning:
-    st.warning(mapping_warning)
 msg_text = text["gen_page_desc"]
 msg_text = msg_text.format(selected_period=selected_period)
 st.markdown(msg_text)
