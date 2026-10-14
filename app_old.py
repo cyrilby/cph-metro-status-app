@@ -1,9 +1,9 @@
 """
 ==================================================
-App visualizing the CPH Metro's operational status [OLD, to be removed]
+App visualizing the CPH Metro's operational status
 ==================================================
 
-Author: github.com/cyrilby
+Author: kirilboyanovbg[at]gmail.com
 Last meaningful update: 13-10-2026
 
 This script contains the source code of the Streamlit
@@ -29,7 +29,7 @@ import streamlit as st
 import yaml
 from plotly_calplot import calplot
 
-from storage import connect_to_db, get_s3_access, manage_s3_file
+from core.storage import connect_to_db, get_s3_access, manage_s3_file
 
 # Setting up the web page title and icon of the app
 st.set_page_config(page_title="CPH metro status", page_icon="🚇")
