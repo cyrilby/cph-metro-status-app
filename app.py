@@ -26,6 +26,7 @@ st.set_page_config(page_title="CPH metro status", page_icon="🚇")
 pages = [
     st.Page("pages/homepage.py", title="Welcome"),
     st.Page("pages/overview.py", title="Overview"),
+    st.Page("pages/daily_reliability.py", title="Daily reliability"),
 ]
 
 pg = st.navigation(pages)

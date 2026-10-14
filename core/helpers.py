@@ -237,4 +237,48 @@ def plot_or_not(plot, df: pd.DataFrame):
         st.warning(warning_text)
 
 
+def colors_for_calplot(data: pd.DataFrame) -> dict:
+    """
+    Gets all unique combinations of daily service statuses covered
+    by the input data and returns a dictionary containing the right
+    colors depending on what combinations are available based on the
+    following values of the daily status variable:
+    -1: should always be gray
+    0: should always be green
+    1: should always be yellow
+    2: should always be red
+    """
+
+    # Specifying the colors to use on the chart
+    gray = "#ededed"
+    green = "#28b09c"
+    yellow = "#fed16a"
+    red = "#fe2b2a"
+
+    # Specifying all possible combinations of statuses and desired colors
+    desired_colors = {
+        (-1,): [[0, gray], [1, gray]],
+        (0,): [[0, green], [1, green]],
+        (1,): [[0, yellow], [1, yellow]],
+        (2,): [[0, red], [1, red]],
+        (-1, 0): [[0, gray], [1, green]],
+        (-1, 1): [[0, gray], [1, yellow]],
+        (-1, 2): [[0, gray], [1, red]],
+        (0, 1): [[0, green], [1, yellow]],
+        (0, 2): [[0, green], [1, red]],
+        (1, 2): [[0, yellow], [1, red]],
+        (-1, 0, 1): [[0, gray], [0.5, green], [1, yellow]],
+        (-1, 0, 2): [[0, gray], [0.5, green], [1, red]],
+        (-1, 1, 2): [[0, gray], [0.5, yellow], [1, red]],
+        (0, 1, 2): [[0, green], [0.5, yellow], [1, red]],
+        (-1, 0, 1, 2): [[0, gray], [0.33, green], [0.66, yellow], [1, red]],
+    }
+
+    # Getting the unique values of the daily disruption score
+    unique_scores = tuple(data["disruption_score"].sort_values().unique().tolist())
+
+    # Returning the appropriate combination of colors to use on the chart
+    return desired_colors.get(unique_scores, [])
+
+
 # %%

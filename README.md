@@ -17,7 +17,9 @@ The `README` file will be updated later.
 
 ### Notes on the updated set-up
 
-In this new set-up, the `app.py` script has a single job: load the interface and the customisation and set up the navigation between pages. Lots of functions have been moved to scripts in the `core` folder, while the individual pages are set up as individual scripts in the `pages` folder.
+**Overall structure**: In this new set-up, the `app.py` script has a single job: load the interface and the customisation and set up the navigation between pages. Lots of functions have been moved to scripts in the `core` folder, while the individual pages are set up as individual scripts in the `pages` folder.
+
+**Database**: it is currently downloaded locally from S3 storage but not sure whether the alternative of connecting directly to it (described [here](https://duckdb.org/docs/current/guides/network_cloud_storage/duckdb_over_https_or_s3)) could be a better/more efficient option? In any case, the current implementation seems good enough.
 
 ## Requirements
 

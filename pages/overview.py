@@ -10,11 +10,10 @@ Last meaningful update: 14-10-2026
 # %% Setting up
 
 import numpy as np
-import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from core.helpers import get_period_string, load_text, plot_or_not
+from core.helpers import load_text, plot_or_not
 from core.loader import get_filtered_data
 from core.storage import get_app_data
 
@@ -23,7 +22,7 @@ text = load_text()
 conn = get_app_data()
 
 
-# %% Page content
+# %% Common for all data-driven pages
 
 # Page title displayed on top
 st.header("Overview")
@@ -33,20 +32,20 @@ data = get_filtered_data(conn)
 min_date = data.min_date
 max_date = data.max_date
 downtime_msg = data.downtime_msg
-data_to_display = data.df
+selected_period = data.selected_period
+df = data.df
 
 # Confirming the selected period
-selected_period = get_period_string(min_date, max_date)
-date_range = pd.date_range(start=min_date, end=max_date)
-date_range = pd.DataFrame(date_range, columns=["date"])
 st.sidebar.markdown(
     f"**Note:** this selection covers the period between {selected_period}."
     + downtime_msg
 )
 
+# %% Specific page content
+
 # Preparing data on the overall split by status
 vars_for_group = ["status_en_short"]
-overall_split = data_to_display.copy()
+overall_split = df.copy()
 overall_split["rows_for_status"] = overall_split.groupby(vars_for_group)[
     "date"
 ].transform("count")
@@ -59,9 +58,7 @@ overall_split = overall_split.reset_index(drop=True)
 
 # Preparing data on the detailed split by status
 vars_for_group = ["status_en"]
-detailed_split = data_to_display[
-    data_to_display["status_en_short"] != "Normal service"
-].copy()
+detailed_split = df[df["status_en_short"] != "Normal service"].copy()
 detailed_split["rows_for_status"] = detailed_split.groupby(vars_for_group)[
     "date"
 ].transform("count")
