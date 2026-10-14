@@ -16,7 +16,7 @@ import streamlit as st
 from plotly_calplot import calplot
 
 from core.helpers import colors_for_calplot, get_period_string, load_text, plot_or_not
-from core.loader import get_filtered_data
+from core.loader import get_filtered_data, set_page_filters
 from core.storage import get_app_data
 
 # Importing data and text strings used in the app
@@ -30,9 +30,12 @@ conn = get_app_data()
 st.header("Daily availability")
 
 # Source & filter data, deal with warnings, etc.
-data = get_filtered_data(conn, False)
+page_filters = set_page_filters()
+data = get_filtered_data(conn, page_filters, apply_date_filter=False)
+
 min_date = data.min_date
 max_date = data.max_date
+n_days = data.n_days
 downtime_msg = data.downtime_msg
 selected_period = data.selected_period
 df = data.df
@@ -44,7 +47,6 @@ st.sidebar.markdown(
 )
 
 # %% Specific page content
-
 
 # Preparing data on daily disruption score where the score means:
 # 0 = no disruptions recorded/status "Unknown" only

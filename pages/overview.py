@@ -14,7 +14,7 @@ import plotly.express as px
 import streamlit as st
 
 from core.helpers import load_text, plot_or_not
-from core.loader import get_filtered_data
+from core.loader import get_filtered_data, set_page_filters
 from core.storage import get_app_data
 
 # Importing data and text strings used in the app
@@ -28,9 +28,12 @@ conn = get_app_data()
 st.header("Overview")
 
 # Source & filter data, deal with warnings, etc.
-data = get_filtered_data(conn)
+page_filters = set_page_filters()
+data = get_filtered_data(conn, page_filters)
+
 min_date = data.min_date
 max_date = data.max_date
+n_days = data.n_days
 downtime_msg = data.downtime_msg
 selected_period = data.selected_period
 df = data.df

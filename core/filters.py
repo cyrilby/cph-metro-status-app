@@ -30,6 +30,10 @@ def filter_by_date_range():
         "SELECT MIN(date), MAX(date) FROM operation_fmt"
     ).fetchone()
 
+    # Force compliance with pd datetime
+    min_date_filter = pd.to_datetime(min_date_filter)
+    max_date_filter = pd.to_datetime(max_date_filter)
+
     # Default date range: Last 30 days
     default_start = max_date_filter - dt.timedelta(days=30)
     default_end = max_date_filter
