@@ -15,6 +15,10 @@ Transitioning the app to use `duckdb` for faster data load and filtering as well
 
 The `README` file will be updated later.
 
+### Notes on the updated set-up
+
+In this new set-up, the `app.py` script has a single job: load the interface and the customisation and set up the navigation between pages. Lots of functions have been moved to scripts in the `core` folder, while the individual pages are set up as individual scripts in the `pages` folder.
+
 ## Requirements
 
 - Python 3.12.10
