@@ -30,6 +30,7 @@ st.header("Disruption impact")
 # Source & filter operations data, deal with warnings, etc.
 page_filters = set_page_filters()
 data = get_filtered_data(conn, page_filters)
+
 min_date = data.min_date
 max_date = data.max_date
 n_days = data.n_days

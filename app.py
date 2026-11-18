@@ -29,6 +29,8 @@ pages = [
     st.Page("pages/daily_reliability.py", title="Daily reliability"),
     st.Page("pages/disruption_reasons.py", title="Disruption reasons"),
     st.Page("pages/disruption_impact.py", title="Disruption impact"),
+    st.Page("pages/disruption_history.py", title="Disruption history"),
+    st.Page("pages/disruption_calculator.py", title="Disruption calculator"),
 ]
 
 pg = st.navigation(pages)

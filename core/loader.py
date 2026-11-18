@@ -7,6 +7,9 @@ from core.filters import (
     filter_by_day_type,
     filter_by_hour_type,
     filter_by_line,
+    filter_by_specific_station,
+    filter_by_specific_weekday,
+    filter_by_travel_time_interval,
     filter_downtime,
 )
 from core.helpers import (
@@ -36,7 +39,28 @@ class PageFilters:
     selected_rows: list
 
 
-def set_page_filters(apply_date_filter: bool = True):
+@dataclass
+class PageFiltersCalc:
+    min_date: object
+    max_date: object
+    station: object
+    travel_time: object
+    travel_day: object
+
+
+@dataclass
+class PageDataCalc:
+    df: pd.DataFrame
+    min_date: object
+    max_date: object
+    n_days: int
+    selected_period: str
+    selected_station: object
+    selected_travel_time: object
+    selected_travel_day: object
+
+
+def set_page_filters():
 
     # Setting up sidebar filters for the data
     min_date, max_date = filter_by_date_range()
@@ -58,12 +82,33 @@ def set_page_filters(apply_date_filter: bool = True):
     )
 
 
+def set_page_filters_calc():
+
+    # Setting up sidebar filters for the data
+    min_date, max_date = filter_by_date_range()
+    station = filter_by_specific_station()
+    travel_time = filter_by_travel_time_interval()
+    travel_day = filter_by_specific_weekday()
+
+    return PageFiltersCalc(
+        min_date=min_date,
+        max_date=max_date,
+        station=station,
+        travel_time=travel_time,
+        travel_day=travel_day,
+    )
+
+
 def get_filtered_data(
     conn,
     page_filters,
     table_name: str = "operation_fmt",
     apply_date_filter: bool = True,
 ) -> PageData:
+    """
+    This function is used across all app pages except for
+    the "Disruption calculator" page.
+    """
 
     # Extracting info from page filters
     min_date = page_filters.min_date
@@ -82,7 +127,13 @@ def get_filtered_data(
         AND date >= ?
         AND date <= ?
         """
-        params = [min_date, max_date, day_types, hour_types, selected_lines]
+        params = [
+            min_date.strftime("%Y-%m-%d"),
+            max_date.strftime("%Y-%m-%d"),
+            day_types,
+            hour_types,
+            selected_lines,
+        ]
     else:
         date_filter = ""
         params = [day_types, hour_types, selected_lines]
@@ -122,4 +173,73 @@ def get_filtered_data(
         n_days=n_days,
         selected_period=selected_period,
         downtime_msg=downtime_msg,
+    )
+
+
+def get_filtered_data_calc(
+    conn,
+    page_filters,
+) -> PageData:
+    """
+    This function is exclusively used on the "Disruption
+    calculator" page.
+    """
+
+    # Extracting info from page filters
+    min_date = page_filters.min_date
+    max_date = page_filters.max_date
+    station = page_filters.station
+    travel_time = page_filters.travel_time
+    travel_day = page_filters.travel_day
+
+    # Confirming the selected period
+    selected_period = get_period_string(min_date, max_date)
+
+    # Preparing params and obligatory date filter
+    date_filter = """
+    AND date >= ?
+    AND date <= ?
+    """
+    params = [
+        min_date.strftime("%Y-%m-%d"),
+        max_date.strftime("%Y-%m-%d"),
+        station,
+        travel_time,
+        travel_day,
+    ]
+
+    # WIP: Deal with missing rush hour (and maybe other)  columns
+    # in the station_impact table in the DB: consider having
+    # thesefilters at the bottom of the query and params.appenx(x) if table_name = "operation_fmt"
+
+    # Querying the database for data
+    query = f"""
+        SELECT *
+        FROM station_impact
+        WHERE 1=1
+            {date_filter}
+            AND station = ?
+            AND hour_interval = ?
+            AND weekday = ?
+        ORDER BY line, date;
+    """
+    df = conn.execute(query, params).df()
+
+    # Correcting certain dtypes from the database
+    # Note: these are needed because of inconsistencies between
+    # different versions of pandas and some other pkgs
+    df["date"] = pd.to_datetime(df["date"]).astype("datetime64[ns]")
+
+    # Confirming the number of days fetched
+    n_days = df["date"].nunique()
+
+    return PageDataCalc(
+        df=df,
+        min_date=min_date,
+        max_date=max_date,
+        n_days=n_days,
+        selected_period=selected_period,
+        selected_station=station,
+        selected_travel_time=travel_time,
+        selected_travel_day=travel_day,
     )
