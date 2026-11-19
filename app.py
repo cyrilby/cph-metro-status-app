@@ -31,6 +31,8 @@ pages = [
     st.Page("pages/disruption_impact.py", title="Disruption impact"),
     st.Page("pages/disruption_history.py", title="Disruption history"),
     st.Page("pages/disruption_calculator.py", title="Disruption calculator"),
+    st.Page("pages/method_info.py", title="About this app"),
+    st.Page("pages/legal_disclaimer.py", title="Legal disclaimer"),
 ]
 
 pg = st.navigation(pages)
