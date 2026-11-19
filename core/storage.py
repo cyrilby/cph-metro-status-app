@@ -113,7 +113,7 @@ def connect_to_db(read_only: bool = True) -> duckdb.DuckDBPyConnection:
 
 
 # The one below is to use directly in the app
-@st.cache_resource(show_spinner=False, ttl=1200)
+@st.cache_resource(show_spinner=False, ttl=3600)
 def get_app_data():
     with st.spinner("Getting latest data..."):
         download_s3_file("database.duckdb", "database.duckdb")
