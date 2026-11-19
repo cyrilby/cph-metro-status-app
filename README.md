@@ -1,5 +1,6 @@
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://cph-metro.streamlit.app/)
 [![MindGraph](https://img.shields.io/badge/Product%20of%20-MindGraph.dk-1ea2b5?logo=https://mindgraph.dk/favicon.png")](https://mindgraph.dk)
+[![RelatedRepos](https://img.shields.io/badge/related-repos-yellow)](https://github.com/cyrilby/cph-metro-status)
 
 # Copenhagen metro operations monitoring app
 
@@ -25,7 +26,6 @@ The `README` file will be updated later.
 
 - Python 3.12.10
 - Python packages as specified in the `requirements.txt` file
-
 
 ## WIP notes and troubleshooting
 
