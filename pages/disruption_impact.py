@@ -4,12 +4,13 @@ Disruption impact page
 ======================
 
 Author: github.com/cyrilby
-Last meaningful update: 14-10-2026
+Last meaningful update: 18-11-2026
 """
 
 # %% Setting up
 
 import numpy as np
+import pandas as pd
 import plotly.express as px
 import streamlit as st
 
@@ -48,31 +49,419 @@ st.sidebar.markdown(
     + downtime_msg
 )
 
-# %% Specific page content
 
-# =================
-# DAILY MAINTENANCE
-# =================
+# %% Functions to load and prepare data for charts
 
-# Preparing data on the daily likelihood of maintenance
-vars_for_group = ["status_en_short", "weekday"]
-by_day_chance_mntn = df.copy()
-by_day_chance_mntn["rows_for_status"] = by_day_chance_mntn.groupby(vars_for_group)[
-    "date"
-].transform("count")
-by_day_chance_mntn["rows_for_day"] = by_day_chance_mntn.groupby("weekday")[
-    "date"
-].transform("count")
-by_day_chance_mntn["status_pct"] = 100 * (
-    by_day_chance_mntn["rows_for_status"] / by_day_chance_mntn["rows_for_day"]
-)
-by_day_chance_mntn["status_pct"] = np.round(by_day_chance_mntn["status_pct"], 1)
-by_day_chance_mntn = by_day_chance_mntn.drop_duplicates(subset=vars_for_group)
-by_day_chance_mntn = by_day_chance_mntn[
-    by_day_chance_mntn["status_en_short"] == "Closed for maintenance"
-].copy()
-by_day_chance_mntn = by_day_chance_mntn.sort_values("weekday_n")
-by_day_chance_mntn = by_day_chance_mntn.reset_index(drop=True)
+
+@st.cache_data(show_spinner=False)
+def get_daily_maintenance(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculates the daily impact of planned maintenance
+    split by weekday name (Monday-Sunday).
+    """
+
+    # Preparing data on the daily likelihood of maintenance
+    vars_for_group = ["status_en_short", "weekday"]
+    by_day_chance_mntn = df.copy()
+    by_day_chance_mntn["rows_for_status"] = by_day_chance_mntn.groupby(vars_for_group)[
+        "date"
+    ].transform("count")
+    by_day_chance_mntn["rows_for_day"] = by_day_chance_mntn.groupby("weekday")[
+        "date"
+    ].transform("count")
+    by_day_chance_mntn["status_pct"] = 100 * (
+        by_day_chance_mntn["rows_for_status"] / by_day_chance_mntn["rows_for_day"]
+    )
+    by_day_chance_mntn["status_pct"] = np.round(by_day_chance_mntn["status_pct"], 1)
+    by_day_chance_mntn = by_day_chance_mntn.drop_duplicates(subset=vars_for_group)
+    by_day_chance_mntn = by_day_chance_mntn[
+        by_day_chance_mntn["status_en_short"] == "Closed for maintenance"
+    ].copy()
+    by_day_chance_mntn = by_day_chance_mntn.sort_values("weekday_n")
+    by_day_chance_mntn = by_day_chance_mntn.reset_index(drop=True)
+
+    return by_day_chance_mntn
+
+
+@st.cache_data(show_spinner=False)
+def get_daily_maintenance_distribution(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Gets the weekly distribution of maintenance works
+    split by weekday name.
+    """
+
+    # Preparing data on the daily distribution of maintenance
+    vars_for_group = ["weekday"]
+    by_day_dist_mntn = df[df["status_en"] == "Closed for maintenance"].copy()
+    by_day_dist_mntn["rows_for_status"] = by_day_dist_mntn.groupby(vars_for_group)[
+        "date"
+    ].transform("count")
+    by_day_dist_mntn["status_pct"] = 100 * (
+        by_day_dist_mntn["rows_for_status"] / len(by_day_dist_mntn)
+    )
+    by_day_dist_mntn["status_pct"] = np.round(by_day_dist_mntn["status_pct"], 1)
+    by_day_dist_mntn = by_day_dist_mntn.drop_duplicates(vars_for_group)
+    by_day_dist_mntn = by_day_dist_mntn.sort_values("rows_for_status")
+    by_day_dist_mntn = by_day_dist_mntn.reset_index(drop=True)
+
+    return by_day_dist_mntn
+
+
+@st.cache_data(show_spinner=False)
+def get_daily_disruption(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculates the daily impact of unplanned disruptions
+    split by weekday name (Monday-Sunday).
+    """
+
+    # Preparing data on the daily likelihood of disruptions
+    vars_for_group = ["status_en_short", "weekday"]
+    by_day_chance_dsrpt = df.copy()
+    by_day_chance_dsrpt["rows_for_status"] = by_day_chance_dsrpt.groupby(
+        vars_for_group
+    )["date"].transform("count")
+    by_day_chance_dsrpt["rows_for_day"] = by_day_chance_dsrpt.groupby("weekday")[
+        "date"
+    ].transform("count")
+    by_day_chance_dsrpt["status_pct"] = 100 * (
+        by_day_chance_dsrpt["rows_for_status"] / by_day_chance_dsrpt["rows_for_day"]
+    )
+    by_day_chance_dsrpt["status_pct"] = np.round(by_day_chance_dsrpt["status_pct"], 1)
+    by_day_chance_dsrpt = by_day_chance_dsrpt.drop_duplicates(vars_for_group)
+    by_day_chance_dsrpt = by_day_chance_dsrpt[
+        by_day_chance_dsrpt["status_en_short"] == "Disruption"
+    ].copy()
+    by_day_chance_dsrpt = by_day_chance_dsrpt.sort_values("weekday_n")
+    by_day_chance_dsrpt = by_day_chance_dsrpt.reset_index(drop=True)
+
+    return by_day_chance_dsrpt
+
+
+@st.cache_data(show_spinner=False)
+def get_disruption_distribution(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Gets the weekly distribution of unplanned disruptions
+    split by weekday name.
+    """
+
+    # Preparing data on the daily distribution of disruptions
+    vars_for_group = ["weekday"]
+    ignore_these = ["Unknown", "Normal service", "Closed for maintenance"]
+    by_day_dist_dsrpt = df[~df["status_en_short"].isin(ignore_these)].copy()
+    by_day_dist_dsrpt["rows_for_status"] = by_day_dist_dsrpt.groupby(vars_for_group)[
+        "date"
+    ].transform("count")
+    by_day_dist_dsrpt["status_pct"] = 100 * (
+        by_day_dist_dsrpt["rows_for_status"] / len(by_day_dist_dsrpt)
+    )
+    by_day_dist_dsrpt["status_pct"] = np.round(by_day_dist_dsrpt["status_pct"], 1)
+    by_day_dist_dsrpt = by_day_dist_dsrpt.drop_duplicates(vars_for_group)
+    by_day_dist_dsrpt = by_day_dist_dsrpt.sort_values("rows_for_status")
+    by_day_dist_dsrpt = by_day_dist_dsrpt.reset_index(drop=True)
+
+    return by_day_dist_dsrpt
+
+
+@st.cache_data(show_spinner=False)
+def get_hourly_maintenance(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculates the hourly impact of planned maintenance
+    split by custom periods based on hours (e.g. from
+    early morning to night time).
+    """
+
+    # Preparing data on the hourly likelihood of maintenance
+    vars_for_group = ["status_en_short", "time_period"]
+    by_period_chance_mntn = df.copy()
+
+    by_period_chance_mntn["rows_for_status"] = by_period_chance_mntn.groupby(
+        vars_for_group
+    )["date"].transform("count")
+    by_period_chance_mntn["rows_for_period"] = by_period_chance_mntn.groupby(
+        "time_period"
+    )["date"].transform("count")
+    by_period_chance_mntn["status_pct"] = 100 * (
+        by_period_chance_mntn["rows_for_status"]
+        / by_period_chance_mntn["rows_for_period"]
+    )
+    by_period_chance_mntn["status_pct"] = np.round(
+        by_period_chance_mntn["status_pct"], 1
+    )
+    by_period_chance_mntn = by_period_chance_mntn.drop_duplicates(subset=vars_for_group)
+    by_period_chance_mntn = by_period_chance_mntn[
+        by_period_chance_mntn["status_en_short"] == "Closed for maintenance"
+    ].copy()
+    by_period_chance_mntn = by_period_chance_mntn.sort_values(
+        "time_period", ascending=False
+    )
+    by_period_chance_mntn = by_period_chance_mntn.reset_index(drop=True)
+
+    return by_period_chance_mntn
+
+
+@st.cache_data(show_spinner=False)
+def get_hourly_distribution_maintenance(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Gets the hourly distribution of maintenance works
+    split by custom periods based on hours (e.g. from
+    early morning to night time).
+    """
+
+    # Preparing data on the hourly distribution of maintenance
+    # (as split by a more detailed definition of day times)
+    vars_for_group = ["time_period"]
+    by_period_dist_mntn = df[df["status_en"] == "Closed for maintenance"].copy()
+    by_period_dist_mntn["rows_for_status"] = by_period_dist_mntn.groupby(
+        vars_for_group
+    )["date"].transform("count")
+    by_period_dist_mntn["status_pct"] = 100 * (
+        by_period_dist_mntn["rows_for_status"] / len(by_period_dist_mntn)
+    )
+    by_period_dist_mntn["status_pct"] = np.round(by_period_dist_mntn["status_pct"], 1)
+    by_period_dist_mntn = by_period_dist_mntn.drop_duplicates(vars_for_group)
+    by_period_dist_mntn = by_period_dist_mntn.sort_values("rows_for_status")
+    by_period_dist_mntn = by_period_dist_mntn.reset_index(drop=True)
+
+    return by_period_dist_mntn
+
+
+@st.cache_data(show_spinner=False)
+def get_hourly_disruption(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculates the hourly impact of unplanned disruptions
+    split by custom periods based on hours (e.g. from
+    early morning to night time).
+    """
+
+    # Preparing data on the hourly likelihood of disruptions
+    vars_for_group = ["status_en_short", "time_period"]
+    by_period_chance_dsrpt = df.copy()
+    by_period_chance_dsrpt["rows_for_status"] = by_period_chance_dsrpt.groupby(
+        vars_for_group
+    )["date"].transform("count")
+    by_period_chance_dsrpt["rows_for_period"] = by_period_chance_dsrpt.groupby(
+        "time_period"
+    )["date"].transform("count")
+    by_period_chance_dsrpt["status_pct"] = 100 * (
+        by_period_chance_dsrpt["rows_for_status"]
+        / by_period_chance_dsrpt["rows_for_period"]
+    )
+    by_period_chance_dsrpt["status_pct"] = np.round(
+        by_period_chance_dsrpt["status_pct"], 1
+    )
+    by_period_chance_dsrpt = by_period_chance_dsrpt.drop_duplicates(vars_for_group)
+    by_period_chance_dsrpt = by_period_chance_dsrpt[
+        by_period_chance_dsrpt["status_en_short"] == "Disruption"
+    ].copy()
+    by_period_chance_dsrpt = by_period_chance_dsrpt.sort_values(
+        "time_period", ascending=False
+    )
+    by_period_chance_dsrpt = by_period_chance_dsrpt.reset_index(drop=True)
+
+    return by_period_chance_dsrpt
+
+
+@st.cache_data(show_spinner=False)
+def get_hourly_distribution_disruption(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Gets the hourly distribution of unplanned disruptions
+    split by custom periods based on hours (e.g. from
+    early morning to night time).
+    """
+
+    # Preparing data on the hourly distribution of disruptions
+    # (as split by a more detailed definition of day times)
+    # (excluding planned maintenance)
+    vars_for_group = ["time_period"]
+    ignore_these = ["Unknown", "Normal service", "Closed for maintenance"]
+    by_period_dist_dsrpt = df[~df["status_en_short"].isin(ignore_these)].copy()
+    by_period_dist_dsrpt["rows_for_status"] = by_period_dist_dsrpt.groupby(
+        vars_for_group
+    )["date"].transform("count")
+    by_period_dist_dsrpt["status_pct"] = 100 * (
+        by_period_dist_dsrpt["rows_for_status"] / len(by_period_dist_dsrpt)
+    )
+    by_period_dist_dsrpt["status_pct"] = np.round(by_period_dist_dsrpt["status_pct"], 1)
+    by_period_dist_dsrpt = by_period_dist_dsrpt.drop_duplicates(vars_for_group)
+    by_period_dist_dsrpt = by_period_dist_dsrpt.sort_values("rows_for_status")
+    by_period_dist_dsrpt = by_period_dist_dsrpt.reset_index(drop=True)
+
+    return by_period_dist_dsrpt
+
+
+@st.cache_data(show_spinner=False)
+def get_rush_maintenance(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculates the hourly impact of planned maintenance
+    split by the official definition of (non-)rush hours.
+    """
+
+    # Preparing data on the rush-hour likelihood of maintenance
+    vars_for_group = ["status_en_short", "official_rush_hour"]
+    by_rush_chance_mntn = df.copy()
+
+    by_rush_chance_mntn["rows_for_status"] = by_rush_chance_mntn.groupby(
+        vars_for_group
+    )["date"].transform("count")
+    by_rush_chance_mntn["rows_for_period"] = by_rush_chance_mntn.groupby(
+        "official_rush_hour"
+    )["date"].transform("count")
+    by_rush_chance_mntn["status_pct"] = 100 * (
+        by_rush_chance_mntn["rows_for_status"] / by_rush_chance_mntn["rows_for_period"]
+    )
+    by_rush_chance_mntn["status_pct"] = np.round(by_rush_chance_mntn["status_pct"], 1)
+    by_rush_chance_mntn = by_rush_chance_mntn.drop_duplicates(subset=vars_for_group)
+    by_rush_chance_mntn = by_rush_chance_mntn[
+        by_rush_chance_mntn["status_en_short"] == "Closed for maintenance"
+    ].copy()
+    by_rush_chance_mntn = by_rush_chance_mntn.sort_values(
+        "official_rush_hour", ascending=False
+    )
+    by_rush_chance_mntn = by_rush_chance_mntn.reset_index(drop=True)
+
+    return by_rush_chance_mntn
+
+
+@st.cache_data(show_spinner=False)
+def get_rush_distribution_maintenance(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Gets the hourly distribution of maintenance works
+    split by the official definition of (non-)rush hours.
+    """
+
+    # Preparing data on the rush-hour distr of maintenance
+    # (as split by a more detailed definition of day times)
+    vars_for_group = ["official_rush_hour"]
+    by_rush_dist_mntn = df[df["status_en"] == "Closed for maintenance"].copy()
+    by_rush_dist_mntn["rows_for_status"] = by_rush_dist_mntn.groupby(vars_for_group)[
+        "date"
+    ].transform("count")
+    by_rush_dist_mntn["status_pct"] = 100 * (
+        by_rush_dist_mntn["rows_for_status"] / len(by_rush_dist_mntn)
+    )
+    by_rush_dist_mntn["status_pct"] = np.round(by_rush_dist_mntn["status_pct"], 1)
+    by_rush_dist_mntn = by_rush_dist_mntn.drop_duplicates(vars_for_group)
+    by_rush_dist_mntn = by_rush_dist_mntn.sort_values("rows_for_status")
+    by_rush_dist_mntn = by_rush_dist_mntn.reset_index(drop=True)
+
+    return by_rush_dist_mntn
+
+
+@st.cache_data(show_spinner=False)
+def get_rush_disruption(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculates the hourly impact of of unplanned disruptions
+    split by the official definition of (non-)rush hours.
+    """
+
+    # Preparing data on the rush-hour likelihood of disruptions
+    vars_for_group = ["status_en_short", "official_rush_hour"]
+    by_rush_chance_dsrpt = df.copy()
+    by_rush_chance_dsrpt["rows_for_status"] = by_rush_chance_dsrpt.groupby(
+        vars_for_group
+    )["date"].transform("count")
+    by_rush_chance_dsrpt["rows_for_period"] = by_rush_chance_dsrpt.groupby(
+        "official_rush_hour"
+    )["date"].transform("count")
+    by_rush_chance_dsrpt["status_pct"] = 100 * (
+        by_rush_chance_dsrpt["rows_for_status"]
+        / by_rush_chance_dsrpt["rows_for_period"]
+    )
+    by_rush_chance_dsrpt["status_pct"] = np.round(by_rush_chance_dsrpt["status_pct"], 1)
+    by_rush_chance_dsrpt = by_rush_chance_dsrpt.drop_duplicates(vars_for_group)
+    by_rush_chance_dsrpt = by_rush_chance_dsrpt[
+        by_rush_chance_dsrpt["status_en_short"] == "Disruption"
+    ].copy()
+    by_rush_chance_dsrpt = by_rush_chance_dsrpt.sort_values(
+        "official_rush_hour", ascending=False
+    )
+    by_rush_chance_dsrpt = by_rush_chance_dsrpt.reset_index(drop=True)
+
+    return by_rush_chance_dsrpt
+
+
+@st.cache_data(show_spinner=False)
+def get_rush_distribution_disruption(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Gets the hourly distribution of unplanned disruptions
+    split by the official definition of (non-)rush hours.
+    """
+
+    # Preparing data on the rush-hour distr of disruptions
+    # (as split by a more detailed definition of day times)
+    # (excluding planned maintenance)
+    vars_for_group = ["official_rush_hour"]
+    ignore_these = ["Unknown", "Normal service", "Closed for maintenance"]
+    by_rush_dist_dsrpt = df[~df["status_en_short"].isin(ignore_these)].copy()
+    by_rush_dist_dsrpt["rows_for_status"] = by_rush_dist_dsrpt.groupby(vars_for_group)[
+        "date"
+    ].transform("count")
+    by_rush_dist_dsrpt["status_pct"] = 100 * (
+        by_rush_dist_dsrpt["rows_for_status"] / len(by_rush_dist_dsrpt)
+    )
+    by_rush_dist_dsrpt["status_pct"] = np.round(by_rush_dist_dsrpt["status_pct"], 1)
+    by_rush_dist_dsrpt = by_rush_dist_dsrpt.drop_duplicates(vars_for_group)
+    by_rush_dist_dsrpt = by_rush_dist_dsrpt.sort_values("rows_for_status")
+    by_rush_dist_dsrpt = by_rush_dist_dsrpt.reset_index(drop=True)
+
+    return by_rush_dist_dsrpt
+
+
+@st.cache_data(show_spinner=False)
+def get_impacted_stations(
+    station_df: pd.DataFrame, n_stations: int = 10
+) -> tuple[pd.DataFrame]:
+    """
+    Gets the top N most and least impacted stations by
+    operational service disruptions.
+    """
+
+    # Preparing data on the 10 most impacted stations
+    most_impacted = station_df[station_df["status_en_short"] == "Disruption"].copy()
+    most_impacted["n_times_affected"] = most_impacted.groupby("station")[
+        "timestamp"
+    ].transform("nunique")
+    most_impacted = most_impacted.drop_duplicates("station")
+    most_impacted = most_impacted.sort_values("n_times_affected", ascending=False)
+    most_impacted = most_impacted.iloc[:n_stations]
+    most_impacted = most_impacted.sort_values("n_times_affected")
+
+    # Getting the name of the most impacted station
+    most_imp_station_name = most_impacted["station"].iloc[-1]
+
+    # Preparing data on the 10 least impacted stations
+    least_impacted = station_df[station_df["status_en_short"] == "Disruption"].copy()
+    least_impacted["n_times_affected"] = least_impacted.groupby("station")[
+        "timestamp"
+    ].transform("nunique")
+    least_impacted = least_impacted.drop_duplicates("station")
+    least_impacted = least_impacted.sort_values("n_times_affected")
+    least_impacted = least_impacted.iloc[:n_stations]
+    least_impacted = least_impacted.sort_values("n_times_affected", ascending=False)
+
+    return most_impacted, least_impacted, most_imp_station_name
+
+
+# %% Preparing data for charts
+
+# Loading and preparing data
+by_day_chance_mntn = get_daily_maintenance(df)
+by_day_dist_mntn = get_daily_maintenance_distribution(df)
+by_day_chance_dsrpt = get_daily_disruption(df)
+by_day_dist_dsrpt = get_disruption_distribution(df)
+by_period_chance_mntn = get_hourly_maintenance(df)
+by_period_chance_mntn = get_hourly_maintenance(df)
+by_period_dist_mntn = get_hourly_distribution_maintenance(df)
+by_period_chance_dsrpt = get_hourly_disruption(df)
+by_period_dist_dsrpt = get_hourly_distribution_disruption(df)
+by_rush_chance_mntn = get_rush_maintenance(df)
+by_rush_dist_mntn = get_rush_distribution_maintenance(df)
+by_rush_chance_dsrpt = get_rush_disruption(df)
+by_rush_dist_dsrpt = get_rush_distribution_disruption(df)
+most_impacted, least_impacted, most_imp_station_name = get_impacted_stations(station_df)
+
+
+# %% Charts with splits by weekday name
 
 # Creating a bar chart with the daily likelihood of maintenance
 chart_by_day_chance_mntn = px.bar(
@@ -86,20 +475,6 @@ chart_by_day_chance_mntn.update_layout(
 chart_by_day_chance_mntn.update_xaxes(title_text="Weekday")
 chart_by_day_chance_mntn.update_yaxes(title_text="% chance of disruption")
 
-# Preparing data on the daily distribution of maintenance
-vars_for_group = ["weekday"]
-by_day_dist_mntn = df[df["status_en"] == "Closed for maintenance"].copy()
-by_day_dist_mntn["rows_for_status"] = by_day_dist_mntn.groupby(vars_for_group)[
-    "date"
-].transform("count")
-by_day_dist_mntn["status_pct"] = 100 * (
-    by_day_dist_mntn["rows_for_status"] / len(by_day_dist_mntn)
-)
-by_day_dist_mntn["status_pct"] = np.round(by_day_dist_mntn["status_pct"], 1)
-by_day_dist_mntn = by_day_dist_mntn.drop_duplicates(vars_for_group)
-by_day_dist_mntn = by_day_dist_mntn.sort_values("rows_for_status")
-by_day_dist_mntn = by_day_dist_mntn.reset_index(drop=True)
-
 # Creating a doughnut chart with maintenance split by day
 chart_by_day_dist_mntn = px.pie(
     by_day_dist_mntn, values="status_pct", names="weekday", hole=0.45
@@ -108,45 +483,6 @@ chart_by_day_dist_mntn.update_layout(
     title_text=f"Metro planned maintenance during the last {n_days} days split by weekday",
     legend_title="",
 )
-
-# =================
-# DAILY DISRUPTIONS
-# =================
-
-# Preparing data on the daily likelihood of disruptions
-vars_for_group = ["status_en_short", "weekday"]
-by_day_chance_dsrpt = df.copy()
-by_day_chance_dsrpt["rows_for_status"] = by_day_chance_dsrpt.groupby(vars_for_group)[
-    "date"
-].transform("count")
-by_day_chance_dsrpt["rows_for_day"] = by_day_chance_dsrpt.groupby("weekday")[
-    "date"
-].transform("count")
-by_day_chance_dsrpt["status_pct"] = 100 * (
-    by_day_chance_dsrpt["rows_for_status"] / by_day_chance_dsrpt["rows_for_day"]
-)
-by_day_chance_dsrpt["status_pct"] = np.round(by_day_chance_dsrpt["status_pct"], 1)
-by_day_chance_dsrpt = by_day_chance_dsrpt.drop_duplicates(vars_for_group)
-by_day_chance_dsrpt = by_day_chance_dsrpt[
-    by_day_chance_dsrpt["status_en_short"] == "Disruption"
-].copy()
-by_day_chance_dsrpt = by_day_chance_dsrpt.sort_values("weekday_n")
-by_day_chance_dsrpt = by_day_chance_dsrpt.reset_index(drop=True)
-
-# Preparing data on the daily distribution of disruptions
-vars_for_group = ["weekday"]
-ignore_these = ["Unknown", "Normal service", "Closed for maintenance"]
-by_day_dist_dsrpt = df[~df["status_en_short"].isin(ignore_these)].copy()
-by_day_dist_dsrpt["rows_for_status"] = by_day_dist_dsrpt.groupby(vars_for_group)[
-    "date"
-].transform("count")
-by_day_dist_dsrpt["status_pct"] = 100 * (
-    by_day_dist_dsrpt["rows_for_status"] / len(by_day_dist_dsrpt)
-)
-by_day_dist_dsrpt["status_pct"] = np.round(by_day_dist_dsrpt["status_pct"], 1)
-by_day_dist_dsrpt = by_day_dist_dsrpt.drop_duplicates(vars_for_group)
-by_day_dist_dsrpt = by_day_dist_dsrpt.sort_values("rows_for_status")
-by_day_dist_dsrpt = by_day_dist_dsrpt.reset_index(drop=True)
 
 # Creating a bar chart with the daily likelihood of unplanned disruptions
 chart_by_day_chance_dsrpt = px.bar(
@@ -169,47 +505,8 @@ chart_by_day_dist_dsrpt.update_layout(
     legend_title="",
 )
 
-# ==================
-# HOURLY MAINTENANCE
-# ==================
 
-# Preparing data on the hourly likelihood of maintenance
-vars_for_group = ["status_en_short", "time_period"]
-by_period_chance_mntn = df.copy()
-
-by_period_chance_mntn["rows_for_status"] = by_period_chance_mntn.groupby(
-    vars_for_group
-)["date"].transform("count")
-by_period_chance_mntn["rows_for_period"] = by_period_chance_mntn.groupby("time_period")[
-    "date"
-].transform("count")
-by_period_chance_mntn["status_pct"] = 100 * (
-    by_period_chance_mntn["rows_for_status"] / by_period_chance_mntn["rows_for_period"]
-)
-by_period_chance_mntn["status_pct"] = np.round(by_period_chance_mntn["status_pct"], 1)
-by_period_chance_mntn = by_period_chance_mntn.drop_duplicates(subset=vars_for_group)
-by_period_chance_mntn = by_period_chance_mntn[
-    by_period_chance_mntn["status_en_short"] == "Closed for maintenance"
-].copy()
-by_period_chance_mntn = by_period_chance_mntn.sort_values(
-    "time_period", ascending=False
-)
-by_period_chance_mntn = by_period_chance_mntn.reset_index(drop=True)
-
-# Preparing data on the hourly distribution of maintenance
-# (as split by a more detailed definition of day times)
-vars_for_group = ["time_period"]
-by_period_dist_mntn = df[df["status_en"] == "Closed for maintenance"].copy()
-by_period_dist_mntn["rows_for_status"] = by_period_dist_mntn.groupby(vars_for_group)[
-    "date"
-].transform("count")
-by_period_dist_mntn["status_pct"] = 100 * (
-    by_period_dist_mntn["rows_for_status"] / len(by_period_dist_mntn)
-)
-by_period_dist_mntn["status_pct"] = np.round(by_period_dist_mntn["status_pct"], 1)
-by_period_dist_mntn = by_period_dist_mntn.drop_duplicates(vars_for_group)
-by_period_dist_mntn = by_period_dist_mntn.sort_values("rows_for_status")
-by_period_dist_mntn = by_period_dist_mntn.reset_index(drop=True)
+# %% Charts with splits by time of day (unofficial hour groups)
 
 # Creating a bar chart with the hourly likelihood of maintenance
 chart_by_period_chance_mntn = px.bar(
@@ -232,50 +529,6 @@ chart_by_period_dist_mntn.update_layout(
     legend_title="",
 )
 
-# ==================
-# HOURLY DISRUPTIONS
-# ==================
-
-# Preparing data on the hourly likelihood of disruptions
-vars_for_group = ["status_en_short", "time_period"]
-by_period_chance_dsrpt = df.copy()
-by_period_chance_dsrpt["rows_for_status"] = by_period_chance_dsrpt.groupby(
-    vars_for_group
-)["date"].transform("count")
-by_period_chance_dsrpt["rows_for_period"] = by_period_chance_dsrpt.groupby(
-    "time_period"
-)["date"].transform("count")
-by_period_chance_dsrpt["status_pct"] = 100 * (
-    by_period_chance_dsrpt["rows_for_status"]
-    / by_period_chance_dsrpt["rows_for_period"]
-)
-by_period_chance_dsrpt["status_pct"] = np.round(by_period_chance_dsrpt["status_pct"], 1)
-by_period_chance_dsrpt = by_period_chance_dsrpt.drop_duplicates(vars_for_group)
-by_period_chance_dsrpt = by_period_chance_dsrpt[
-    by_period_chance_dsrpt["status_en_short"] == "Disruption"
-].copy()
-by_period_chance_dsrpt = by_period_chance_dsrpt.sort_values(
-    "time_period", ascending=False
-)
-by_period_chance_dsrpt = by_period_chance_dsrpt.reset_index(drop=True)
-
-# Preparing data on the hourly distribution of disruptions
-# (as split by a more detailed definition of day times)
-# (excluding planned maintenance)
-vars_for_group = ["time_period"]
-ignore_these = ["Unknown", "Normal service", "Closed for maintenance"]
-by_period_dist_dsrpt = df[~df["status_en_short"].isin(ignore_these)].copy()
-by_period_dist_dsrpt["rows_for_status"] = by_period_dist_dsrpt.groupby(vars_for_group)[
-    "date"
-].transform("count")
-by_period_dist_dsrpt["status_pct"] = 100 * (
-    by_period_dist_dsrpt["rows_for_status"] / len(by_period_dist_dsrpt)
-)
-by_period_dist_dsrpt["status_pct"] = np.round(by_period_dist_dsrpt["status_pct"], 1)
-by_period_dist_dsrpt = by_period_dist_dsrpt.drop_duplicates(vars_for_group)
-by_period_dist_dsrpt = by_period_dist_dsrpt.sort_values("rows_for_status")
-by_period_dist_dsrpt = by_period_dist_dsrpt.reset_index(drop=True)
-
 # Creating a bar chart with the hourly likelihood of disruptions
 chart_by_period_chance_dsrpt = px.bar(
     by_period_chance_dsrpt,
@@ -297,47 +550,8 @@ chart_by_period_dist_dsprt.update_layout(
     legend_title="",
 )
 
-# =====================
-# RUSH HOUR MAINTENANCE
-# =====================
 
-# Preparing data on the rush-hour likelihood of maintenance
-vars_for_group = ["status_en_short", "official_rush_hour"]
-by_rush_chance_mntn = df.copy()
-
-by_rush_chance_mntn["rows_for_status"] = by_rush_chance_mntn.groupby(vars_for_group)[
-    "date"
-].transform("count")
-by_rush_chance_mntn["rows_for_period"] = by_rush_chance_mntn.groupby(
-    "official_rush_hour"
-)["date"].transform("count")
-by_rush_chance_mntn["status_pct"] = 100 * (
-    by_rush_chance_mntn["rows_for_status"] / by_rush_chance_mntn["rows_for_period"]
-)
-by_rush_chance_mntn["status_pct"] = np.round(by_rush_chance_mntn["status_pct"], 1)
-by_rush_chance_mntn = by_rush_chance_mntn.drop_duplicates(subset=vars_for_group)
-by_rush_chance_mntn = by_rush_chance_mntn[
-    by_rush_chance_mntn["status_en_short"] == "Closed for maintenance"
-].copy()
-by_rush_chance_mntn = by_rush_chance_mntn.sort_values(
-    "official_rush_hour", ascending=False
-)
-by_rush_chance_mntn = by_rush_chance_mntn.reset_index(drop=True)
-
-# Preparing data on the rush-hour distr of maintenance
-# (as split by a more detailed definition of day times)
-vars_for_group = ["official_rush_hour"]
-by_rush_dist_mntn = df[df["status_en"] == "Closed for maintenance"].copy()
-by_rush_dist_mntn["rows_for_status"] = by_rush_dist_mntn.groupby(vars_for_group)[
-    "date"
-].transform("count")
-by_rush_dist_mntn["status_pct"] = 100 * (
-    by_rush_dist_mntn["rows_for_status"] / len(by_rush_dist_mntn)
-)
-by_rush_dist_mntn["status_pct"] = np.round(by_rush_dist_mntn["status_pct"], 1)
-by_rush_dist_mntn = by_rush_dist_mntn.drop_duplicates(vars_for_group)
-by_rush_dist_mntn = by_rush_dist_mntn.sort_values("rows_for_status")
-by_rush_dist_mntn = by_rush_dist_mntn.reset_index(drop=True)
+# %% Charts with splits by time of day (official rush hour)
 
 # Creating a bar chart with the likelihood of maintenance by rush hour
 chart_by_rush_chance_mntn = px.bar(
@@ -360,49 +574,6 @@ chart_by_rush_dist_mntn.update_layout(
     legend_title="",
 )
 
-# =====================
-# RUSH HOUR DISRUPTIONS
-# =====================
-
-# Preparing data on the rush-hour likelihood of disruptions
-vars_for_group = ["status_en_short", "official_rush_hour"]
-by_rush_chance_dsrpt = df.copy()
-by_rush_chance_dsrpt["rows_for_status"] = by_rush_chance_dsrpt.groupby(vars_for_group)[
-    "date"
-].transform("count")
-by_rush_chance_dsrpt["rows_for_period"] = by_rush_chance_dsrpt.groupby(
-    "official_rush_hour"
-)["date"].transform("count")
-by_rush_chance_dsrpt["status_pct"] = 100 * (
-    by_rush_chance_dsrpt["rows_for_status"] / by_rush_chance_dsrpt["rows_for_period"]
-)
-by_rush_chance_dsrpt["status_pct"] = np.round(by_rush_chance_dsrpt["status_pct"], 1)
-by_rush_chance_dsrpt = by_rush_chance_dsrpt.drop_duplicates(vars_for_group)
-by_rush_chance_dsrpt = by_rush_chance_dsrpt[
-    by_rush_chance_dsrpt["status_en_short"] == "Disruption"
-].copy()
-by_rush_chance_dsrpt = by_rush_chance_dsrpt.sort_values(
-    "official_rush_hour", ascending=False
-)
-by_rush_chance_dsrpt = by_rush_chance_dsrpt.reset_index(drop=True)
-
-# Preparing data on the rush-hour distr of disruptions
-# (as split by a more detailed definition of day times)
-# (excluding planned maintenance)
-vars_for_group = ["official_rush_hour"]
-ignore_these = ["Unknown", "Normal service", "Closed for maintenance"]
-by_rush_dist_dsrpt = df[~df["status_en_short"].isin(ignore_these)].copy()
-by_rush_dist_dsrpt["rows_for_status"] = by_rush_dist_dsrpt.groupby(vars_for_group)[
-    "date"
-].transform("count")
-by_rush_dist_dsrpt["status_pct"] = 100 * (
-    by_rush_dist_dsrpt["rows_for_status"] / len(by_rush_dist_dsrpt)
-)
-by_rush_dist_dsrpt["status_pct"] = np.round(by_rush_dist_dsrpt["status_pct"], 1)
-by_rush_dist_dsrpt = by_rush_dist_dsrpt.drop_duplicates(vars_for_group)
-by_rush_dist_dsrpt = by_rush_dist_dsrpt.sort_values("rows_for_status")
-by_rush_dist_dsrpt = by_rush_dist_dsrpt.reset_index(drop=True)
-
 # Creating a bar chart with the rush-hour likelihood of disruptions
 chart_by_rush_chance_dsrpt = px.bar(
     by_rush_chance_dsrpt,
@@ -424,32 +595,8 @@ chart_by_rush_dist_dsprt.update_layout(
     legend_title="",
 )
 
-# =================
-# AFFECTED STATIONS
-# =================
 
-# Preparing data on the 10 most impacted stations
-most_impacted = station_df[station_df["status_en_short"] == "Disruption"].copy()
-most_impacted["n_times_affected"] = most_impacted.groupby("station")[
-    "timestamp"
-].transform("nunique")
-most_impacted = most_impacted.drop_duplicates("station")
-most_impacted = most_impacted.sort_values("n_times_affected", ascending=False)
-most_impacted = most_impacted.iloc[:10]
-most_impacted = most_impacted.sort_values("n_times_affected")
-
-# Getting the name of the most impacted station
-most_imp_station_name = most_impacted["station"].iloc[-1]
-
-# Preparing data on the 10 least impacted stations
-least_impacted = station_df[station_df["status_en_short"] == "Disruption"].copy()
-least_impacted["n_times_affected"] = least_impacted.groupby("station")[
-    "timestamp"
-].transform("nunique")
-least_impacted = least_impacted.drop_duplicates("station")
-least_impacted = least_impacted.sort_values("n_times_affected")
-least_impacted = least_impacted.iloc[:10]
-least_impacted = least_impacted.sort_values("n_times_affected", ascending=False)
+# %% Charts with most/least affected stations
 
 # Creating a bar chart with the most often disrupted stations
 chart_stations_most = px.bar(
@@ -475,7 +622,10 @@ chart_stations_least.update_layout(
 chart_stations_least.update_xaxes(title_text="Number of records with disruption")
 chart_stations_least.update_yaxes(title_text="Station")
 
-# =========== CHART DESCRIPTIONS ===========
+
+# %% Finalizing charts and page UI
+
+# Adding chart descriptions
 chance_dist_disclaimer = text["chance_dist_disclaimer"]
 rush_disclaimer = text["rush_disclaimer"]
 stations_disclaimer = text["stations_disclaimer"]
