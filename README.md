@@ -40,20 +40,7 @@ As of 18-11-2026, the following pages are ready for use:
 - Disruption impact
 - Disruption history
 - Disruption calculator*
+- Info on data sources
+- Legal disclaimer
 
 \* *Note*: as per the notes in the `disruption_calculator.py` script, I've just copy-pasted the old page in here but I want to make the page a bit more interactive and add charts for when the station is most likely to be disrupted. This may require that I pre-compute the disruption by station, day and hour for all rows and then do the filtering in the page. But for now, at least all pages of the old app are working as before 😉
-
-### Unfinished pages
-
-The following pages have not yet been added:
-
-- Info on data sources*
-- Legal disclaimer*
-
-\* *Note*: these last two pages require no coding.
-
-### Other things to double-check
-
-- Make sure that data is cached on all pages to ensure the app runs faster (I may have forgotten to cache the data on some pages)
-  - E.g. `daily_reliability.py` seems to load the data a lot slower than `disruption_reasons.py`, which loads data instantly
-- AI suggests that I **wrap the data processing** (but not the chart making) in the individual page scripts into Python functions and add the `@st.cache_data` on top of these functions
