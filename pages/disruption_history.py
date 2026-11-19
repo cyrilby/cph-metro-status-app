@@ -4,7 +4,7 @@ Disruption history page
 =======================
 
 Author: github.com/cyrilby
-Last meaningful update: 18-11-2026
+Last meaningful update: 19-11-2026
 """
 
 # %% Setting up
@@ -45,107 +45,124 @@ st.sidebar.markdown(
     + downtime_msg
 )
 
+
+# %% Functions to load and prepare data for charts
+
+
+@st.cache_data(show_spinner=False)
+def get_daily_disruption(df: pd.DataFrame) -> tuple:
+    """
+    Prepares datasets with daily disruption metrics
+    for the charts shown on this page of the app.
+    """
+
+    # Loading additional data used on this page
+    query = "SELECT * FROM mapping_stations"
+    mapping_stations = conn.execute(query).fetch_df()
+
+    # Note: this range is needed for df merge later on
+    date_range = pd.date_range(start=min_date, end=max_date)
+    date_range = pd.DataFrame({"date": date_range})
+
+    # Preparing data on disruption durations
+    daily_disruption = df.copy()
+    daily_disruption["time_diff"] = (
+        daily_disruption["disruption_end"] - daily_disruption["disruption_start"]
+    ).abs()
+
+    daily_disruption = daily_disruption.loc[
+        daily_disruption.groupby(["status_dk", "disruption_end"], observed=True)[
+            "time_diff"
+        ].idxmin()
+    ].copy()
+
+    # Preparing data for daily disruptions
+    vars_for_group = ["status_en_short", "date"]
+
+    daily_disruption["rows_for_status"] = daily_disruption.groupby(vars_for_group)[
+        "date"
+    ].transform("count")
+
+    daily_disruption["unique_msg"] = daily_disruption.groupby(vars_for_group)[
+        "status_dk"
+    ].transform("nunique")
+
+    daily_disruption["rows_for_date"] = daily_disruption.groupby("date")[
+        "date"
+    ].transform("count")
+
+    daily_disruption["status_pct"] = 100 * (
+        daily_disruption["rows_for_status"] / daily_disruption["rows_for_date"]
+    )
+
+    daily_disruption["avg_disr_dur_hours"] = daily_disruption.groupby(vars_for_group)[
+        "disruption_duration_hours"
+    ].transform("mean")
+    daily_disruption["status_pct"] = np.round(daily_disruption["status_pct"], 1)
+
+    daily_disruption["avg_disr_dur_hours"] = np.round(
+        daily_disruption["avg_disr_dur_hours"], 1
+    )
+    daily_disruption = daily_disruption.drop_duplicates(vars_for_group)
+    daily_disruption = daily_disruption[
+        daily_disruption["status_en_short"] == "Disruption"
+    ].copy()
+
+    daily_disruption = daily_disruption.reset_index(drop=True)
+    daily_disruption = pd.merge(date_range, daily_disruption, on="date", how="left")
+    daily_disruption = daily_disruption.set_index("date")
+    daily_disruption = daily_disruption.asfreq("D")
+    daily_disruption = daily_disruption.reset_index()
+
+    # Dealing with extreme cases (outliers can
+    # occur if the same service message appears
+    # at several very different points in time)
+    observed_med = daily_disruption["avg_disr_dur_hours"].median()
+    tolerance_lvl = 100 * observed_med
+
+    # Note: an outlier is defined as a duration
+    # 100 times or more higher than the median
+    # duration observed in the given period
+    daily_disruption["avg_disr_dur_hours"] = np.where(
+        daily_disruption["avg_disr_dur_hours"] <= tolerance_lvl,
+        daily_disruption["avg_disr_dur_hours"],
+        np.nan,
+    )
+
+    # Dealing with potential NANs (we don't always have disruptions)
+    daily_disruption["status_pct"] = daily_disruption["status_pct"].fillna(0)
+
+    daily_disruption["unique_msg"] = daily_disruption["unique_msg"].fillna(0)
+
+    # Note: for this specific indicator, we
+    # impute with the average so as not to skew
+    # our subsequent data aggregation
+    daily_disruption["avg_disr_dur_hours"] = daily_disruption[
+        "avg_disr_dur_hours"
+    ].fillna(daily_disruption["avg_disr_dur_hours"].mean())
+
+    # Preparing data for the N of stations impacted by day
+    n_total_stations = len(mapping_stations["station"].unique())
+    daily_disr_stations = df.copy()
+    daily_disr_stations["avg_n_impacted"] = daily_disr_stations.groupby("date")[
+        "n_impacted_stations"
+    ].transform("mean")
+    daily_disr_stations["avg_pct_impacted"] = 100 * (
+        daily_disr_stations["avg_n_impacted"] / n_total_stations
+    )
+    daily_disr_stations["avg_pct_impacted"] = np.round(
+        daily_disr_stations["avg_pct_impacted"], 1
+    )
+    daily_disr_stations = daily_disr_stations.drop_duplicates("date")
+    daily_disr_stations = daily_disr_stations.reset_index(drop=True)
+
+    return daily_disruption, daily_disr_stations
+
+
 # %% Specific page content
 
-# Loading additional data used on this page
-query = "SELECT * FROM mapping_stations"
-mapping_stations = conn.execute(query).fetch_df()
-
-# Note: this range is needed for df merge later on
-date_range = pd.date_range(start=min_date, end=max_date)
-date_range = pd.DataFrame({"date": date_range})
-
-# Preparing data on disruption durations
-daily_disruption = df.copy()
-daily_disruption["time_diff"] = (
-    daily_disruption["disruption_end"] - daily_disruption["disruption_start"]
-).abs()
-
-daily_disruption = daily_disruption.loc[
-    daily_disruption.groupby(["status_dk", "disruption_end"], observed=True)[
-        "time_diff"
-    ].idxmin()
-].copy()
-
-# Preparing data for daily disruptions
-vars_for_group = ["status_en_short", "date"]
-
-daily_disruption["rows_for_status"] = daily_disruption.groupby(vars_for_group)[
-    "date"
-].transform("count")
-
-daily_disruption["unique_msg"] = daily_disruption.groupby(vars_for_group)[
-    "status_dk"
-].transform("nunique")
-
-daily_disruption["rows_for_date"] = daily_disruption.groupby("date")["date"].transform(
-    "count"
-)
-
-daily_disruption["status_pct"] = 100 * (
-    daily_disruption["rows_for_status"] / daily_disruption["rows_for_date"]
-)
-
-daily_disruption["avg_disr_dur_hours"] = daily_disruption.groupby(vars_for_group)[
-    "disruption_duration_hours"
-].transform("mean")
-daily_disruption["status_pct"] = np.round(daily_disruption["status_pct"], 1)
-
-daily_disruption["avg_disr_dur_hours"] = np.round(
-    daily_disruption["avg_disr_dur_hours"], 1
-)
-daily_disruption = daily_disruption.drop_duplicates(vars_for_group)
-daily_disruption = daily_disruption[
-    daily_disruption["status_en_short"] == "Disruption"
-].copy()
-
-daily_disruption = daily_disruption.reset_index(drop=True)
-daily_disruption = pd.merge(date_range, daily_disruption, on="date", how="left")
-daily_disruption = daily_disruption.set_index("date")
-daily_disruption = daily_disruption.asfreq("D")
-daily_disruption = daily_disruption.reset_index()
-
-# Dealing with extreme cases (outliers can
-# occur if the same service message appears
-# at several very different points in time)
-observed_med = daily_disruption["avg_disr_dur_hours"].median()
-tolerance_lvl = 100 * observed_med
-
-# Note: an outlier is defined as a duration
-# 100 times or more higher than the median
-# duration observed in the given period
-daily_disruption["avg_disr_dur_hours"] = np.where(
-    daily_disruption["avg_disr_dur_hours"] <= tolerance_lvl,
-    daily_disruption["avg_disr_dur_hours"],
-    np.nan,
-)
-
-# Dealing with potential NANs (we don't always have disruptions)
-daily_disruption["status_pct"] = daily_disruption["status_pct"].fillna(0)
-
-daily_disruption["unique_msg"] = daily_disruption["unique_msg"].fillna(0)
-
-# Note: for this specific indicator, we
-# impute with the average so as not to skew
-# our subsequent data aggregation
-daily_disruption["avg_disr_dur_hours"] = daily_disruption["avg_disr_dur_hours"].fillna(
-    daily_disruption["avg_disr_dur_hours"].mean()
-)
-
-# Preparing data for the N of stations impacted by day
-n_total_stations = len(mapping_stations["station"].unique())
-daily_disr_stations = df.copy()
-daily_disr_stations["avg_n_impacted"] = daily_disr_stations.groupby("date")[
-    "n_impacted_stations"
-].transform("mean")
-daily_disr_stations["avg_pct_impacted"] = 100 * (
-    daily_disr_stations["avg_n_impacted"] / n_total_stations
-)
-daily_disr_stations["avg_pct_impacted"] = np.round(
-    daily_disr_stations["avg_pct_impacted"], 1
-)
-daily_disr_stations = daily_disr_stations.drop_duplicates("date")
-daily_disr_stations = daily_disr_stations.reset_index(drop=True)
+# Loading and preparing data
+daily_disruption, daily_disr_stations = get_daily_disruption(df)
 
 # Preparing KPI metrics for the page
 total_disruptions = int(daily_disruption["unique_msg"].sum())
