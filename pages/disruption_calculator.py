@@ -15,6 +15,9 @@ station is most likely to be disrupted. This may require that
 I pre-compute the disruption by station, day and hour for all
 rows and then do the filtering in the page. But for now, at
 least all pages of the old app are working as before 😉
+
+--> I may even move this to the data scraper/cleaner workflow
+so that I don't need to compute things in the app!
 """
 
 # %% Setting up

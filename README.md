@@ -5,7 +5,7 @@
 
 * Author: Kiril (GitHub@cyrilby)
 * Website: [mindgraph.dk](https://mindgraph.dk)
-* Last meaningful update: 18-11-2026
+* Last meaningful update: 19-11-2026
 
 This project is centered around automatically gathering data from the [Copenhagen Metro's website](https://m.dk) and monitoring its operations over time in order to find out how often (and when) things are most likely to break. To facilitate the communication of the insights gathered, the data is presented visually using a [Streamlit app](https://cph-metro.streamlit.app/).
 
@@ -55,3 +55,5 @@ The following pages have not yet been added:
 ### Other things to double-check
 
 - Make sure that data is cached on all pages to ensure the app runs faster (I may have forgotten to cache the data on some pages)
+  - E.g. `daily_reliability.py` seems to load the data a lot slower than `disruption_reasons.py`, which loads data instantly
+- AI suggests that I **wrap the data processing** (but not the chart making) in the individual page scripts into Python functions and add the `@st.cache_data` on top of these functions

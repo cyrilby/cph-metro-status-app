@@ -4,7 +4,7 @@ Daily reliability page
 ======================
 
 Author: github.com/cyrilby
-Last meaningful update: 14-10-2026
+Last meaningful update: 19-11-2026
 """
 
 # %% Setting up
@@ -15,7 +15,7 @@ import plotly.express as px
 import streamlit as st
 from plotly_calplot import calplot
 
-from core.helpers import colors_for_calplot, get_period_string, load_text, plot_or_not
+from core.helpers import colors_for_calplot, load_text, plot_or_not
 from core.loader import get_filtered_data, set_page_filters
 from core.storage import get_app_data
 
@@ -46,108 +46,134 @@ st.sidebar.markdown(
     + downtime_msg
 )
 
+# %% Functions to load and prepare data for charts
+
+
+@st.cache_data(show_spinner=False)
+def define_disruption(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Defines daily disruption scores using a metric of 0-2.
+    Used by the other functions on this page to prepare
+    data for the charts.
+    """
+
+    # Preparing data on daily disruption score where the score means:
+    # 0 = no disruptions recorded/status "Unknown" only
+    # 1 = at least 1 partial disruption recorded during that day
+    # 2 = at least 1 complete disruption recorded during that day
+    df["status_unknown"] = df["status_en"] == "Unknown"
+    df["normal_service"] = df["status_en"] == "Normal service"
+    df["complete_disruption"] = df["status_en"] == "Complete service disruption"
+    df["partial_disruption"] = ~df["status_en"].isin(
+        [
+            "Normal service",
+            "Complete service disruption",
+            "Closed for maintenance",
+        ]
+    )
+    df["disruption_score"] = np.where(
+        df["normal_service"],
+        0,
+        np.where(
+            df["partial_disruption"],
+            1,
+            np.where(df["complete_disruption"], 2, 0),
+        ),
+    )
+    df["disruption_score"] = df.groupby("date")["disruption_score"].transform("max")
+    df["disruption_score"] = np.where(df["status_unknown"], -1, df["disruption_score"])
+    df = df.drop_duplicates("date")
+    df = df.reset_index(drop=True)
+    df = df[["date", "disruption_score"]]
+    status_dict = {
+        -1: "Unknown status",
+        0: "Normal service",
+        1: "Partial disruption",
+        2: "Complete disruption",
+    }
+    df["interpretation"] = df["disruption_score"].map(status_dict)
+
+    return df
+
+
+@st.cache_data(show_spinner=False)
+def get_monthly_disr_stats(df: pd.DataFrame) -> tuple[pd.DataFrame]:
+    """
+    Creates a df with the N of days in each month where:
+    - we have no disruptions
+    - we have partial disruptions
+    - we have complete disruptions
+    """
+
+    # Preparing a dataset with N of days without any disrruptions
+    # aggregated by month
+    hist_no_disr = df.copy()
+    hist_no_disr["month"] = hist_no_disr["date"].dt.to_period("M").dt.to_timestamp()
+    hist_no_disr["day_no_disr"] = hist_no_disr["disruption_score"] == 0
+    hist_no_disr["days_without_disruption"] = hist_no_disr.groupby("month")[
+        "day_no_disr"
+    ].transform("mean")
+    hist_no_disr["days_without_disruption"] = (
+        100 * hist_no_disr["days_without_disruption"]
+    )
+    hist_no_disr["days_without_disruption"] = hist_no_disr[
+        "days_without_disruption"
+    ].round(1)
+    hist_no_disr = hist_no_disr[["month", "days_without_disruption"]]
+    hist_no_disr = hist_no_disr.sort_values("month")
+    hist_no_disr = hist_no_disr.drop_duplicates()
+    hist_no_disr = hist_no_disr.reset_index(drop=True)
+
+    # Preparing a dataset with N of days with partial disruptions
+    # aggregated by month
+    hist_partial_disr = df.copy()
+    hist_partial_disr["month"] = (
+        hist_partial_disr["date"].dt.to_period("M").dt.to_timestamp()
+    )
+    hist_partial_disr["day_disr"] = hist_partial_disr["disruption_score"] == 1
+    hist_partial_disr["days_with_disruption"] = hist_partial_disr.groupby("month")[
+        "day_disr"
+    ].transform("mean")
+    hist_partial_disr["days_with_disruption"] = (
+        100 * hist_partial_disr["days_with_disruption"]
+    )
+    hist_partial_disr["days_with_disruption"] = hist_partial_disr[
+        "days_with_disruption"
+    ].round(1)
+    hist_partial_disr = hist_partial_disr[["month", "days_with_disruption"]]
+    hist_partial_disr = hist_partial_disr.sort_values("month")
+    hist_partial_disr = hist_partial_disr.drop_duplicates()
+    hist_partial_disr = hist_partial_disr.reset_index(drop=True)
+
+    # Preparing a dataset with N of days with partial disruptions
+    # aggregated by month
+    hist_complete_disr = df.copy()
+    hist_complete_disr["month"] = (
+        hist_complete_disr["date"].dt.to_period("M").dt.to_timestamp()
+    )
+    hist_complete_disr["day_disr"] = hist_complete_disr["disruption_score"] == 2
+    hist_complete_disr["days_with_disruption"] = hist_complete_disr.groupby("month")[
+        "day_disr"
+    ].transform("mean")
+    hist_complete_disr["days_with_disruption"] = (
+        100 * hist_complete_disr["days_with_disruption"]
+    )
+    hist_complete_disr["days_with_disruption"] = hist_complete_disr[
+        "days_with_disruption"
+    ].round(1)
+    hist_complete_disr = hist_complete_disr[["month", "days_with_disruption"]]
+    hist_complete_disr = hist_complete_disr.sort_values("month")
+    hist_complete_disr = hist_complete_disr.drop_duplicates()
+    hist_complete_disr = hist_complete_disr.reset_index(drop=True)
+
+    return hist_no_disr, hist_partial_disr, hist_complete_disr
+
+
 # %% Specific page content
 
-# Preparing data on daily disruption score where the score means:
-# 0 = no disruptions recorded/status "Unknown" only
-# 1 = at least 1 partial disruption recorded during that day
-# 2 = at least 1 complete disruption recorded during that day
-df["status_unknown"] = df["status_en"] == "Unknown"
-df["normal_service"] = df["status_en"] == "Normal service"
-df["complete_disruption"] = df["status_en"] == "Complete service disruption"
-df["partial_disruption"] = ~df["status_en"].isin(
-    [
-        "Normal service",
-        "Complete service disruption",
-        "Closed for maintenance",
-    ]
-)
-df["disruption_score"] = np.where(
-    df["normal_service"],
-    0,
-    np.where(
-        df["partial_disruption"],
-        1,
-        np.where(df["complete_disruption"], 2, 0),
-    ),
-)
-df["disruption_score"] = df.groupby("date")["disruption_score"].transform("max")
-df["disruption_score"] = np.where(df["status_unknown"], -1, df["disruption_score"])
-df = df.drop_duplicates("date")
-df = df.reset_index(drop=True)
-df = df[["date", "disruption_score"]]
-status_dict = {
-    -1: "Unknown status",
-    0: "Normal service",
-    1: "Partial disruption",
-    2: "Complete disruption",
-}
-df["interpretation"] = df["disruption_score"].map(status_dict)
-
-# Confirming the selected period for the calendar chart
-recent_reliability = df[(df["date"] >= min_date) & (df["date"] <= max_date)].copy()
-selected_period = get_period_string(min_date, max_date)
-date_range = pd.date_range(start=min_date, end=max_date)
-date_range = pd.DataFrame(date_range, columns=["date"])
-
-# Preparing a dataset with N of days without any disrruptions
-# aggregated by month
-hist_no_disr = df.copy()
-hist_no_disr["month"] = hist_no_disr["date"].dt.to_period("M").dt.to_timestamp()
-hist_no_disr["day_no_disr"] = hist_no_disr["disruption_score"] == 0
-hist_no_disr["days_without_disruption"] = hist_no_disr.groupby("month")[
-    "day_no_disr"
-].transform("mean")
-hist_no_disr["days_without_disruption"] = 100 * hist_no_disr["days_without_disruption"]
-hist_no_disr["days_without_disruption"] = hist_no_disr["days_without_disruption"].round(
-    1
-)
-hist_no_disr = hist_no_disr[["month", "days_without_disruption"]]
-hist_no_disr = hist_no_disr.sort_values("month")
-hist_no_disr = hist_no_disr.drop_duplicates()
-hist_no_disr = hist_no_disr.reset_index(drop=True)
-
-# Preparing a dataset with N of days with partial disruptions
-# aggregated by month
-hist_partial_disr = df.copy()
-hist_partial_disr["month"] = (
-    hist_partial_disr["date"].dt.to_period("M").dt.to_timestamp()
-)
-hist_partial_disr["day_disr"] = hist_partial_disr["disruption_score"] == 1
-hist_partial_disr["days_with_disruption"] = hist_partial_disr.groupby("month")[
-    "day_disr"
-].transform("mean")
-hist_partial_disr["days_with_disruption"] = (
-    100 * hist_partial_disr["days_with_disruption"]
-)
-hist_partial_disr["days_with_disruption"] = hist_partial_disr[
-    "days_with_disruption"
-].round(1)
-hist_partial_disr = hist_partial_disr[["month", "days_with_disruption"]]
-hist_partial_disr = hist_partial_disr.sort_values("month")
-hist_partial_disr = hist_partial_disr.drop_duplicates()
-hist_partial_disr = hist_partial_disr.reset_index(drop=True)
-
-# Preparing a dataset with N of days with partial disruptions
-# aggregated by month
-hist_complete_disr = df.copy()
-hist_complete_disr["month"] = (
-    hist_complete_disr["date"].dt.to_period("M").dt.to_timestamp()
-)
-hist_complete_disr["day_disr"] = hist_complete_disr["disruption_score"] == 2
-hist_complete_disr["days_with_disruption"] = hist_complete_disr.groupby("month")[
-    "day_disr"
-].transform("mean")
-hist_complete_disr["days_with_disruption"] = (
-    100 * hist_complete_disr["days_with_disruption"]
-)
-hist_complete_disr["days_with_disruption"] = hist_complete_disr[
-    "days_with_disruption"
-].round(1)
-hist_complete_disr = hist_complete_disr[["month", "days_with_disruption"]]
-hist_complete_disr = hist_complete_disr.sort_values("month")
-hist_complete_disr = hist_complete_disr.drop_duplicates()
-hist_complete_disr = hist_complete_disr.reset_index(drop=True)
+# Loading and preparing data
+df = define_disruption(df)
+hist_no_disr, hist_partial_disr, hist_complete_disr = get_monthly_disr_stats(df)
 
 # Creating a line chart showing % of days without disruptions
 # aggregated by month
@@ -187,6 +213,9 @@ pct_complete_disr_chart.update_layout(
 )
 pct_complete_disr_chart.update_xaxes(title_text="Month")
 pct_complete_disr_chart.update_yaxes(title_text="% of days in month")
+
+# Confirming the selected period for the calendar chart
+recent_reliability = df[(df["date"] >= min_date) & (df["date"] <= max_date)].copy()
 
 # Creating summary KPIs to show above chart
 cal_kpi = recent_reliability.copy()
@@ -249,11 +278,11 @@ st.markdown(text["daily_page_hist_no_disr"])
 plot_or_not(pct_no_disr_chart, hist_no_disr)
 
 st.subheader("Days with partial disruption(s) by month", divider="grey")
-st.markdown(text["daily_page_hist_no_disr"])  # WIP as of 22-03-2026
+st.markdown(text["daily_page_hist_no_disr"])
 plot_or_not(pct_partial_disr_chart, hist_partial_disr)
 
 st.subheader("Days with complete disruption(s) by month", divider="grey")
-st.markdown(text["daily_page_hist_no_disr"])  # WIP as of 22-03-2026
+st.markdown(text["daily_page_hist_no_disr"])
 plot_or_not(pct_complete_disr_chart, hist_complete_disr)
 
 

@@ -17,7 +17,7 @@ import yaml
 from core.storage import get_app_data
 
 
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def load_text():
     with open("text.yaml", "r", encoding="utf-8") as file:
         return yaml.safe_load(file)
